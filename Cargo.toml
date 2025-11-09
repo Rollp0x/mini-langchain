@@ -11,6 +11,9 @@ categories = ["development-tools", "api-bindings"]
 
 [features]
 full = []
+# Enable to use upstream ollama-rs streaming APIs (gates code in ollama.rs)
+# This maps our feature `ollama_stream` to the upstream crate feature `stream`.
+ollama_stream = ["ollama-rs/stream"]
 
 [dependencies]
 # 异步运行时
@@ -33,6 +36,12 @@ anyhow = "1"
 # 日志
 tracing = "0.1"
 tracing-subscriber = "0.3"
+ollama-rs = "0.3.2"
+
+# proc-macro for generating Tool wrappers
+mini-langchain-macros = { path = "./mini-langchain-macros" }
+async-stream = "0.3.6"
+async-openai = "0.30.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
