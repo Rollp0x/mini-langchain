@@ -2,15 +2,14 @@
 name = "mini-langchain"
 version = "0.1.0"
 edition = "2024"
-authors = ["zkrollp zkrollp@gmail.com"]
+authors = ["Rollp0x zkrollp@gmail.com"]
 description = "Minimal Rust LangChain implementation for text-only interactions"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/mini-langchain"
+repository = "https://github.com/Rollp0x/mini-langchain"
 keywords = ["langchain", "llm", "ai", "agent", "tool-calling"]
 categories = ["development-tools", "api-bindings"]
 
 [features]
-full = []
 # Enable to use upstream ollama-rs streaming APIs (gates code in ollama.rs)
 # This maps our feature `ollama_stream` to the upstream crate feature `stream`.
 ollama_stream = ["ollama-rs/stream"]
