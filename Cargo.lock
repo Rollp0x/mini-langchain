@@ -886,6 +886,8 @@ dependencies = [
 [[package]]
 name = "mini-langchain-macros"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bb3cca5d40b78cf8d98d8e57f0b129cae0cfc6f1e53cd8b959444744d5ecbd3"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
