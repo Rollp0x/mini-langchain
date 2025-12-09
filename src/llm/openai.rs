@@ -1,4 +1,4 @@
-// 参考：https://github.com/64bit/async-openai/blob/main/examples/tool-call/src/main.rs
+// see https://github.com/64bit/async-openai/blob/main/examples/tool-call/src/main.rs
 pub use async_openai::{
     Client, config::{Config, OpenAIConfig}
 };

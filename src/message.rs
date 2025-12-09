@@ -4,21 +4,21 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
-    System,           // 系统指令
-    User,             // 用户输入
-    Assistant,        // AI回复
-    ToolResponce,     // Tool执行返回
-    Tool,             //用户预定义函数
-    Developer,       //开发者消息,兼容openai
+    System,           // System message
+    User,             // User input
+    Assistant,        // AI response
+    ToolResponce,     // Tool execution response
+    Tool,             // User-defined function
+    Developer,       // Developer message, compatible with OpenAI
 }
 
-/// 消息类型（极简）
+/// Message type (minimal)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: MessageRole,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,  // 用于工具调用的名称
+    pub name: Option<String>,  // Name used for tool calls
 }
 
 

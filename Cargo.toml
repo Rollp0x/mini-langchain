@@ -2,7 +2,7 @@
 name = "mini-langchain"
 version = "0.1.0"
 edition = "2024"
-authors = ["Your Name <you@example.com>"]
+authors = ["zkrollp zkrollp@gmail.com"]
 description = "Minimal Rust LangChain implementation for text-only interactions"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/yourusername/mini-langchain"
@@ -16,24 +16,24 @@ full = []
 ollama_stream = ["ollama-rs/stream"]
 
 [dependencies]
-# 异步运行时
+## Async runtime
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
 
-# HTTP 客户端
+## HTTP client
 reqwest = { version = "0.12", features = ["json", "stream"] }
 
-# 序列化
+## Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 
-# 错误处理
+## Error handling
 thiserror = "1"
 anyhow = "1"
 
-# 日志
+## Logging
 tracing = "0.1"
 tracing-subscriber = "0.3"
 ollama-rs = "0.3.2"

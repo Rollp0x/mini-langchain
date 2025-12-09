@@ -1,195 +1,98 @@
+
 # Mini-LangChain Design Document
 
-> 极简的 Rust LangChain 实现 - 专注核心功能，只支持文本输入
+> Minimal Rust LangChain implementation - focus on core features, text-only, type-safe, and easy to use.
 
-## 项目目标
+## Project Goals
 
-### 核心理念
-- **极简主义**：只实现必要功能，避免过度工程
-- **类型安全**：充分利用 Rust 的类型系统
-- **零成本抽象**：性能优先，避免不必要的运行时开销
-- **自用优先**：为个人项目设计，不追求通用性
+### Core Principles
+- **Minimalism**: Only essential features, avoid over-engineering
+- **Type Safety**: Leverage Rust's type system
+- **Zero-cost Abstraction**: Performance first, avoid unnecessary runtime overhead
+- **Personal Use First**: Designed for personal/small projects
 
-### 功能范围
+### Supported Features
 
-✅ **支持的功能**
-- 文本输入/输出（仅文本，不支持图片、音频等）
-- 多 LLM 支持（OpenAI、Anthropic、Qwen、Deepseek、Ollama）
+- Text input/output (text only)
+- Multiple LLM support (OpenAI, Anthropic, Qwen, Deepseek, Ollama)
 - Tool/Function Calling
-- 简单的 Agent 模式（ReAct）
-- 配置文件驱动
+- Agent mode (ReAct)
+- Config file driven
 
-❌ **不支持的功能**
-- 多模态（图片、音频、视频）
-- 复杂的 Chain（只实现基础的）
-- Memory（简化版或不实现）
-- 向量数据库集成（后期可选）
-- Document Loaders（后期可选）
+### Not Supported
+
+- Multimodal (image/audio/video)
+- Complex chains (only basic supported)
+- Vector DB/document loaders (future optional)
 
 ---
 
-## 架构设计
+## Architecture Overview
 
-### 核心模块
+### Main Modules
 
 ```
 mini-langchain/
 ├── src/
-│   ├── lib.rs                  # 库入口
-│   ├── llm/                    # LLM 抽象和实现
-│   │   ├── mod.rs
-│   │   ├── traits.rs           # LLM trait 定义
-│   │   ├── openai.rs           # OpenAI 实现
-│   │   ├── anthropic.rs        # Anthropic 实现
-│   │   ├── qwen.rs             # Qwen 实现
-│   │   ├── deepseek.rs         # Deepseek 实现
-│   │   └── ollama.rs           # Ollama 实现
-│   ├── tools/                  # Tool 系统
-│   │   ├── mod.rs
-│   │   ├── schema.rs           # ToolSchema（统一表示）
-│   │   ├── macros.rs           # define_tool! 宏
-│   │   └── builtin/            # 内置工具
-│   │       ├── mod.rs
-│   │       ├── calculator.rs
-│   │       └── search.rs
-│   ├── agent/                  # Agent 实现
-│   │   ├── mod.rs
-│   │   ├── simple.rs           # 简单的 Agent 循环
-│   │   └── react.rs            # ReAct Agent
-│   ├── message.rs              # 消息类型
-│   ├── config.rs               # 配置管理
-│   ├── error.rs                # 错误类型
-│   └── prelude.rs              # 便捷导入
-├── examples/                   # 示例代码
-│   ├── simple_chat.rs
-│   ├── tool_calling.rs
-│   └── react_agent.rs
-├── tests/                      # 集成测试
-│   └── integration_test.rs
+│   ├── lib.rs            # Library entry point
+│   ├── llm/              # LLM abstraction and implementations
+│   ├── tools/            # Tool system
+│   ├── agent/            # Agent implementation
+│   ├── message.rs        # Message types
+│   ├── config.rs         # Config management
+│   ├── error.rs          # Error types
+│   └── prelude.rs        # Convenient imports
 ├── Cargo.toml
-├── DESIGN.md                   # 本文档
+├── DESIGN.md
 └── README.md
 ```
 
 
----
+## Core Type Design
 
-## 核心类型设计
-
-### 1. LLM Trait
+### LLM Trait
 
 ```rust
-/// 核心 LLM trait（极简版）
+// src/llm/traits.rs (simplified)
 #[async_trait]
 pub trait LLM: Send + Sync {
-    /// 生成文本响应
-    async fn generate(&self, messages: &[Message]) -> Result<String, LLMError>;
-    
-    /// 带工具的生成（可选）
-    async fn generate_with_tools(
-        &self,
-        messages: &[Message],
-        tools: &[ToolSchema],
-    ) -> Result<GenerateResult, LLMError> {
-        // 默认实现：不支持工具
-        Err(LLMError::ToolsNotSupported)
-    }
-    
-    /// 流式生成（可选）
-    async fn stream(
-        &self,
-        messages: &[Message],
-    ) -> Result<Pin<Box<dyn Stream<Item = String> + Send>>, LLMError> {
-        // 默认实现：不支持流式
-        Err(LLMError::StreamNotSupported)
-    }
+    async fn generate(&self, messages: &[Message]) -> LLMResult<GenerateResult>;
+    // ...
 }
 ```
 
-### 2. Message 类型
+### Message Type
 
 ```rust
-/// 消息类型（极简）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: MessageRole,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,  // 用于工具调用的名称
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     System,
     User,
     Assistant,
+    ToolResponce,
     Tool,
-}
-
-impl Message {
-    pub fn system(content: impl Into<String>) -> Self {
-        Self {
-            role: MessageRole::System,
-            content: content.into(),
-            name: None,
-        }
-    }
-    
-    pub fn user(content: impl Into<String>) -> Self {
-        Self {
-            role: MessageRole::User,
-            content: content.into(),
-            name: None,
-        }
-    }
-    
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self {
-            role: MessageRole::Assistant,
-            content: content.into(),
-            name: None,
-        }
-    }
-    
-    pub fn tool(name: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            role: MessageRole::Tool,
-            content: content.into(),
-            name: Some(name.into()),
-        }
-    }
+    Developer,
 }
 ```
 
-### 3. Tool 系统
+### Tool System
+
 
 ```rust
-/// 统一的 Tool Schema（中间表示）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// src/tools/schema.rs (simplified)
 pub struct ToolSchema {
     pub name: String,
     pub description: String,
-    pub parameters: serde_json::Value,  // JSON Schema
+    pub parameters: serde_json::Value,
 }
 
-/// 工具调用请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCall {
-    pub id: Option<String>,
-    pub name: String,
-    pub arguments: serde_json::Value,
-}
-
-/// 生成结果（可能包含工具调用）
-#[derive(Debug, Clone)]
-pub struct GenerateResult {
-    pub content: String,
-    pub tool_calls: Option<Vec<ToolCall>>,
-}
-
-/// Tool trait
-#[async_trait]
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
@@ -197,85 +100,52 @@ pub trait Tool: Send + Sync {
     async fn run(&self, input: serde_json::Value) -> Result<String, ToolError>;
 }
 
-/// 定义工具的宏（简化版示例）
-define_tool! {
-    struct CalculatorTool {
-        name: "calculator",
-        description: "执行数学计算",
-        parameters: {
-            expression: String {
-                description: "数学表达式，例如: 2+2 或 5*10",
-                required: true,
-            }
-        },
-        run: |input| async move {
-            let expr = input["expression"].as_str()
-                .ok_or_else(|| ToolError::InvalidInput("缺少表达式".into()))?;
-            let result = eval_expression(expr)?;
-            Ok(result.to_string())
-        }
-    }
+// You can define custom tools using the proc-macro attribute:
+#[tool(
+    name = "get_weather",
+    description = "Get weather for a given city",
+    params(city = "City name, e.g. 'San Francisco'")
+)]
+fn get_weather(city: String) -> String {
+    format!("It's always sunny in {}!", city)
 }
 ```
 
-### 4. LLM 特定格式转换
+### Agent
+
 ```rust
-// 为每个 LLM 的工具格式实现 From
-impl From<&ToolSchema> for OpenAIToolSchema {
-    fn from(schema: &ToolSchema) -> Self { ... }
+// src/agent/types.rs (simplified)
+pub struct Agent {
+    pub name: String,
+    pub llm: Arc<dyn LLM>,
+    pub tools: HashMap<String, Arc<dyn Tool>>,
+    pub memory: Vec<Message>,
+    pub system_prompt: Option<String>,
+    pub max_iterations: usize,
 }
 
-impl From<&ToolSchema> for AnthropicToolSchema {
-    fn from(schema: &ToolSchema) -> Self { ... }
+impl Agent {
+    pub fn new(name: impl Into<String>, llm: Arc<dyn LLM>, max_iterations: Option<usize>) -> Self { ... }
+    pub fn register_tool(&mut self, name: Option<&str>, tool: Arc<dyn Tool>) -> &mut Self { ... }
+    pub fn run_task(&mut self, task: &str) -> ... { ... }
 }
 ```
-
-### 5. Agent
-```rust
-/// 简单的 Agent
-pub struct SimpleAgent {
-    llm: Box<dyn LLM>,
-    tools: Vec<Arc<dyn Tool>>,
-    max_iterations: usize,
-}
-
-impl SimpleAgent {
-    pub async fn run(&self, task: &str) -> Result<String, AgentError> {
-        // ReAct 循环：Think → Act → Observe
-        for _ in 0..self.max_iterations {
-            // 1. LLM 思考
-            let response = self.llm.generate_with_tools(...).await?;
-            
-            // 2. 解析工具调用
-            if let Some(tool_call) = parse_tool_call(&response) {
-                // 3. 执行工具
-                let result = execute_tool(&tool_call).await?;
-                // 4. 继续循环
-                continue;
-            }
-            
-            // 5. 返回最终答案
-            return Ok(response);
-        }
-        Err(AgentError::MaxIterationsReached)
-    }
-}
 ```
 
 
 ---
 
-## 配置系统
+## Config
 
-### 配置文件格式 (config.toml)
+### config.toml
 
 
 ```toml
 [llm]
 provider = "openai"     # openai | anthropic | qwen | deepseek | ollama
 model = "gpt-4"
-api_key = "sk-..."      # 可选，从环境变量读取
-base_url = "https://..." # 可选
+api_key = "sk-..."       # Optional, read from environment variables
+base_url = "https://..." # Optional
 
 [agent]
 max_iterations = 5
@@ -284,13 +154,13 @@ temperature = 0.7
 [tools]
 enabled = ["calculator", "search"]
 
-# 可选：工具特定配置
+# Optional: Tool-specific configurations
 [tools.search]
 api_key = "search-api-key"
 max_results = 5
 ```
 
-### 配置加载
+### Configuration Loading
 
 
 ```rust
@@ -308,20 +178,19 @@ impl Config {
     }
     
     pub fn from_env() -> Result<Self, ConfigError> {
-        // 从环境变量读取，优先级：
         // MINI_LANGCHAIN_PROVIDER -> llm.provider
         // MINI_LANGCHAIN_API_KEY -> llm.api_key
         // MINI_LANGCHAIN_MODEL -> llm.model
-        unimplemented!("从环境变量加载配置")
+        unimplemented!("Load configuration from environment variables")
     }
 }
 ```
 
 ---
 
-## 错误处理
+## Error Handling
 
-### 统一的错误类型
+### Unified Error Types
 
 
 ```rust
@@ -351,147 +220,113 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 ---
 
-## 依赖管理
 
+## Implementation Plan
 
-```toml
-[package]
-name = "mini-langchain"
-version = "0.1.0"
-edition = "2021"
-authors = ["Your Name <you@example.com>"]
-description = "Minimal Rust LangChain implementation for text-only interactions"
-license = "MIT OR Apache-2.0"
+### Phase 1: Core Foundation (Week 1)
+- [ ] Project structure setup
+- [ ] Message and Error base types
+- [ ] LLM trait definition
+- [ ] Basic OpenAI implementation (only generate)
+- [ ] Configuration system
 
-[dependencies]
-# 异步运行时
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-futures = "0.3"
+### Phase 2: Tool System (Week 2)
+- [ ] ToolSchema design
+- [ ] Tool trait definition
+- [ ] define_tool! macro implementation
+- [ ] Built-in tool: Calculator
+- [ ] OpenAI Function Calling integration
 
-# HTTP 客户端
-reqwest = { version = "0.12", features = ["json", "stream"] }
-
-# 序列化
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-toml = "0.8"
-
-# 错误处理
-thiserror = "1"
-anyhow = "1"
-
-# 日志
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-[dev-dependencies]
-tokio-test = "0.4"
-mockito = "1"
-```
-
----
-
-## 实现计划
-
-### Phase 1: 核心基础 (Week 1)
-- [ ] 项目结构搭建
-- [ ] Message、Error 等基础类型
-- [ ] LLM trait 定义
-- [ ] OpenAI 基础实现（只实现 generate）
-- [ ] 配置系统
-
-### Phase 2: Tool 系统 (Week 2)
-- [ ] ToolSchema 设计
-- [ ] Tool trait 定义
-- [ ] define_tool! 宏实现
-- [ ] 内置工具：Calculator
-- [ ] OpenAI Function Calling 集成
-
-### Phase 3: 多 LLM 支持 (Week 3)
-- [ ] Anthropic 实现
-- [ ] Qwen 实现
-- [ ] Deepseek 实现
-- [ ] Ollama 实现
-- [ ] From<&ToolSchema> 适配器
+### Phase 3: Multi-LLM Support (Week 3)
+- [ ] Anthropic implementation
+- [ ] Qwen implementation
+- [ ] Deepseek implementation
+- [ ] Ollama implementation
+- [ ] From<&ToolSchema> adapter
 
 ### Phase 4: Agent (Week 4)
-- [ ] SimpleAgent 实现
-- [ ] ReAct 模式
-- [ ] 工具执行循环
-- [ ] 错误处理和重试
+- [ ] SimpleAgent implementation
+- [ ] ReAct mode
+- [ ] Tool execution loop
+- [ ] Error handling and retry
 
-### Phase 5: 优化和示例 (Week 5)
-- [ ] 流式输出支持
-- [ ] 完整的示例代码
-- [ ] 文档和注释
-- [ ] 单元测试
+### Phase 5: Optimization & Examples (Week 5)
+- [ ] Streaming output support
+
+## Error Handling
+
+### Unified Error Types
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("LLM error: {0}")]
+    LLM(#[from] LLMError),
+    #[error("Tool error: {0}")]
+    Tool(#[from] ToolError),
+    #[error("Agent error: {0}")]
+    Agent(#[from] AgentError),
+    #[error("Config error: {0}")]
+    Config(#[from] ConfigError),
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+```
 
 ---
 
-## 使用示例
+## Example Usage
 
-### 示例 1: 简单对话
 
+### Simple Chat (Config-based)
 
 ```rust
 use mini_langchain::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 从配置文件加载
     let config = Config::from_file("config.toml")?;
     let llm = create_llm(&config.llm)?;
-    
-    // 简单对话
     let messages = vec![
-        Message::system("你是一个有帮助的助手"),
-        Message::user("什么是 Rust？"),
+        Message::system("You are a helpful assistant."),
+        Message::user("What is Rust?"),
     ];
-    
     let response = llm.generate(&messages).await?;
     println!("{}", response);
-    
     Ok(())
 }
 ```
 
-### 示例 2: 使用工具
-
+### Ollama Direct Usage Example
 
 ```rust
-use mini_langchain::prelude::*;
+use mini_langchain::llm::ollama::Ollama;
+use mini_langchain::message::Message;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let config = Config::from_file("config.toml")?;
-    let llm = create_llm(&config.llm)?;
-    
-    // 定义工具
-    let calculator = Arc::new(CalculatorTool);
-    
-    // 准备工具 schema
-    let tools = vec![calculator.schema()];
-    
-    let messages = vec![
-        Message::user("计算 25 * 4 等于多少？"),
-    ];
-    
-    let result = llm.generate_with_tools(&messages, &tools).await?;
-    
-    if let Some(tool_calls) = result.tool_calls {
-        for call in tool_calls {
-            let output = calculator.run(call.arguments).await?;
-            println!("工具结果: {}", output);
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create Ollama wrapper and select a local model (e.g. qwen3:8b)
+    let ollama = Ollama::default().with_model("qwen3:8b");
+
+    let messages = vec![Message::user("Why is the sky blue?")];
+
+    match ollama.generate(&messages).await {
+        Ok(res) => {
+            println!("generation: {}", res.generation);
+            let tokens = res.tokens;
+            println!("tokens: prompt={} completion={} total={}", tokens.prompt_tokens, tokens.completion_tokens, tokens.total_tokens);
         }
+        Err(e) => eprintln!("error calling Ollama: {:?}", e),
     }
-    
     Ok(())
 }
 ```
 
-### 示例 3: Agent
-
+### Agent Example (Config-based)
 
 ```rust
 use mini_langchain::prelude::*;
@@ -500,122 +335,84 @@ use mini_langchain::prelude::*;
 async fn main() -> Result<()> {
     let config = Config::from_file("config.toml")?;
     let llm = create_llm(&config.llm)?;
-    
-    // 创建工具
     let tools = vec![
         Arc::new(CalculatorTool) as Arc<dyn Tool>,
         Arc::new(SearchTool) as Arc<dyn Tool>,
     ];
-    
-    // 创建 Agent
-    let agent = SimpleAgent::new(llm, tools);
-    
-    // 运行任务
-    let result = agent.run(
-        "北京今天天气怎么样？如果温度超过 25 度，计算 25 * 1.8 + 32"
-    ).await?;
-    
-    println!("结果: {}", result);
-    
+    let mut agent = Agent::new("assistant", llm, Some(5));
+    for tool in &tools {
+        agent.register_tool(None, tool.clone());
+    }
+    let result = agent.run_task("What's the weather in Beijing today? If the temperature is above 25°C, calculate 25 * 1.8 + 32.").await?;
+    println!("Result: {}", result);
     Ok(())
 }
 ```
 
----
+### Agent Example with Ollama and Custom Tool
 
-## 设计原则
+```rust
+use mini_langchain::{
+    *,
+    llm::ollama::Ollama,
+    agent::{
+        types::Agent,
+        traits::AgentRunner
+    }
+};
+use std::sync::Arc;
 
-### 1. 简单优于复杂
+// Use the proc-macro attribute to generate the Tool implementation
+#[tool(
+    name = "get_weather",
+    description = "Get weather for a given city",
+    params(city = "City name, e.g. 'San Francisco'")
+)]
+fn get_weather(city: String) -> String {
+    format!("It's always sunny in {}!", city)
+}
 
-- 只实现必要功能
-- 避免过度抽象
-- 代码行数控制在 2000 行以内
+#[tokio::main]
+async fn main() {
+    // Adjust model name to one available in your Ollama server.
+    let ollama = Ollama::default().with_model("qwen3:8b");
+    let llm: Arc<dyn mini_langchain::llm::traits::LLM> = Arc::new(ollama);
 
-### 2. 类型安全优先
+    let mut agent = Agent::new("Ollama_qwen3:8b", llm, Some(5));
+    agent.register_tool(None, Arc::new(GetWeatherTool));
 
-- 充分利用 Rust 类型系统
-- 编译时捕获错误
-- 避免 unwrap()，使用 Result
+    agent.set_system_prompt(
+        r##"You are a weather forecasting intelligent assistant. You can query tools or answer directly."##);
 
-### 3. 零成本抽象
+    let prompt = "What's the weather in Beijing?";
 
-- 使用编译时泛型而非运行时多态（当适用时）
-- 避免不必要的堆分配
-- 性能敏感部分使用 `#[inline]`
+    match agent.call_llm(prompt).await {
+        Ok(res) => {
+            println!("generation: {:?}", res);
+        }
+        Err(e) => eprintln!("LLM error: {:?}", e),
+    }
+}
+```
 
-### 4. 实用主义
+## Design Principles
 
-- 优先使用标准库（`From`, `Into`, `Error` 等）
-- 不重复造轮子（使用成熟的 crate）
-- 能用 `serde_json::Value` 就不定义新类型
-
-### 5. 可扩展性
-
-- 为将来扩展留接口
-- 但不为假想的需求编码
-
----
-
-## 后期可选功能
-
-### 优先级 2
-- [ ] 流式输出完整支持
-- [ ] 简单的对话历史管理
-- [ ] 更多内置工具（天气查询、文件操作等）
-- [ ] 重试机制和错误恢复
-
-### 优先级 3
-- [ ] 基础的 Document Loader
-- [ ] 简单的向量存储（基于 FAISS 或 Qdrant）
-- [ ] RAG 支持
-- [ ] Prompt 模板系统
-
----
-
-## 贡献指南
-
-
-这是一个自用项目，但欢迎：
-
-- 🐛 Bug 修复
-- 📝 文档改进
-- 💡 简单功能建议
-
-**不欢迎：**
-
-- ❌ 复杂功能
-- ❌ 过度抽象
-- ❌ 破坏简洁性的 PR
+1. **Simplicity over complexity**: Only implement what is needed, avoid over-abstraction, keep codebase small.
+2. **Type safety**: Leverage Rust's type system, prefer Result over unwrap().
+3. **Zero-cost abstraction**: Prefer generics over trait objects when possible, avoid unnecessary heap allocations.
+4. **Pragmatism**: Use standard crates, don't reinvent the wheel, use serde_json::Value for flexibility.
+5. **Extensibility**: Leave room for future extension, but don't code for imaginary needs.
 
 ---
 
-## 许可证
+## License
 
 MIT OR Apache-2.0
 
----
-
-## 参考资料
+## References
 
 - [LangChain Python](https://github.com/langchain-ai/langchain)
 - [LangChain.js](https://github.com/langchain-ai/langchainjs)
 - [langchain-rust](https://github.com/Abraxas-365/langchain-rust)
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference)
 - [Anthropic API Reference](https://docs.anthropic.com/claude/reference)
-
----
-
-## 常见问题
-
-### Q: 为什么不支持多模态？
-A: 为了保持简单，专注于文本处理。多模态会增加很多复杂性。
-
-### Q: 为什么不使用 trait object 而是泛型？
-A: 在可能的地方使用泛型以获得零成本抽象，但对于 LLM 和 Tool 等需要动态分发的场景，仍使用 trait object。
-
-### Q: 如何添加新的 LLM 提供商？
-A: 实现 `LLM` trait 即可。可以参考 `openai.rs` 的实现。
-
-### Q: 性能如何？
-A: 由于是网络 IO 密集型应用，性能瓶颈主要在 API 调用上。Rust 实现本身几乎没有额外开销。
-

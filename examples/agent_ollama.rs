@@ -21,18 +21,17 @@ fn get_weather(city: String) -> String {
 #[tokio::main]
 async fn main() {
     // Adjust model name to one available in your Ollama server.
-    // let ollama = Ollama::default().with_model("qwen3:8b");
-    let ollama = Ollama::default().with_model("deepseek-r1:latest");
+    let ollama = Ollama::default().with_model("qwen3:8b");
     let llm: Arc<dyn mini_langchain::llm::traits::LLM> = Arc::new(ollama);
 
-    let mut agent = Agent::new("Ollama_deepseek-r1:latest", llm, Some(5));
+    let mut agent = Agent::new("Ollama_qwen3:8b", llm, Some(5));
 
     // register echo tool
     agent.register_tool(None, Arc::new(GetWeatherTool));
 
 
     agent.set_system_prompt(
-        r##"你是一天气预报智能助手,你可以查询工具或者直接回答"##);
+        r##"You are a weather forecasting intelligent assistant. You can query tools or answer directly."##);
 
     // Ask the model to get weather for Beijing so it should request the `get_weather` tool.
     let prompt = "What's the weather in Beijing?";

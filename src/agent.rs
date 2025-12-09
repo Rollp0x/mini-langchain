@@ -54,7 +54,7 @@ impl Agent {
         self.system_prompt = Some(prompt.into());
     }
 
-    // 生成系统提示
+    // generate system prompt
     pub fn generate_system_prompt(&self) -> Vec<Message> {
         let mut msgs = Vec::new();
         if let Some(prompt) = self.system_prompt.as_ref() {
@@ -62,7 +62,7 @@ impl Agent {
         }
         if !self.tools.is_empty() {
             msgs.push(Message::developer(
-                format!("我同时提供了一些工具供你选择,如果你要调用工具,请在回复中包含以下json格式{}", 
+                format!("I also provide some tools for you to choose from. If you want to call a tool, please include the following JSON format in your response: {}", 
                 json!({
                     "tool_calls": [
                         {
@@ -117,7 +117,6 @@ impl AgentRunner for Agent {
             result.tokens.total_tokens += res.tokens.total_tokens;
             // update generation
             result.generation = res.generation.clone();
-            println!("Agent iteration {}: {}", counter, res.generation);
 
             counter += 1;
             // check if there are tool calls
@@ -138,7 +137,6 @@ impl AgentRunner for Agent {
                     }
                 }
             } else {
-                println!("Agent finished after {} iterations.", counter);
                 return Ok(result);
             }
         }

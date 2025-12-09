@@ -8,7 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ollama = Ollama::default().with_model("qwen3:8b");
 
     // Simple user message
-    let messages = vec![Message::user("为什么天空是蓝色？".to_string())];
+    let messages = vec![Message::user("Why is the sky blue?".to_string())];
 
     // Call generate (non-streaming)
     match ollama.generate(&messages).await {
