@@ -21,7 +21,7 @@ pub struct GenerateResult {
     /// Each entry contains the tool name and the arguments object the LLM wants
     /// the agent to pass when invoking that tool.
     #[serde(default)]
-    pub call_tools: Vec<CallInfo>,
+    pub tool_calls: Vec<CallInfo>,
 }
 
 /// Structured information about a single tool call requested by the LLM.

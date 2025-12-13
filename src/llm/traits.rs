@@ -30,3 +30,4 @@ pub trait LLM: Send + Sync {
     /// Return a stream that may borrow from `messages`. The stream lifetime is tied to `'a`.
     fn stream<'a>(&'a self, messages: &'a [Message]) -> BoxStream<'a, LLMResult<StreamData>>;
 }
+

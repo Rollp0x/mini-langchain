@@ -61,8 +61,10 @@ impl Agent {
             msgs.push(Message::system(prompt.clone()));
         }
         if !self.tools.is_empty() {
-            msgs.push(Message::developer(
-                format!("I also provide some tools for you to choose from. If you want to call a tool, please include the following JSON format in your response: {}", 
+        msgs.push(Message::developer(
+            format!("I also provide some tools for you to choose from. If you want to call a tool, please include the following JSON format in your response: {}
+
+            IMPORTANT: After you have completed the task by calling all necessary tools, you MUST return a final response WITHOUT any tool_calls. Simply provide a summary or confirmation message to indicate completion. Do NOT continue calling tools after the task is done.", 
                 json!({
                     "tool_calls": [
                         {
@@ -106,43 +108,37 @@ impl AgentRunner for Agent {
         msgs.push(Message::user(prompt.to_string()));
         let mut result = AgentResult::default();
         let mut  counter:usize = 0;
-
+        // Main loop: call LLM, check for tool calls, execute tools, repeat.
         while counter < self.max_iterations {
             // Call the LLM to get a response.
             let res = self.llm.generate(&msgs).await?;
-            // get assistant message
-            let msg = Message::assistant(res.generation.clone());
             result.tokens.prompt_tokens += res.tokens.prompt_tokens;
             result.tokens.completion_tokens += res.tokens.completion_tokens;
             result.tokens.total_tokens += res.tokens.total_tokens;
-            // update generation
-            result.generation = res.generation.clone();
-
             counter += 1;
             // check if there are tool calls
-            if !res.call_tools.is_empty() {
+            if !res.tool_calls.is_empty() {
                 // add assistant message
-                msgs.push(msg);
+                msgs.push(Message::assistant(res.generation));
                 // process tool calls
-                for call_info in res.call_tools.into_iter(){
-                    let name = call_info.name.clone();
-                    if let Some(tool_impl) = self.tools.get(&name){
+                for call_info in res.tool_calls {
+                    let name = &call_info.name;
+                    if let Some(tool_impl) = self.tools.get(name){
                         let tool_result = tool_impl.run(call_info.args).await?;
                         let tool_res_msg = Message::tool_res(
-                            &call_info.name,
-                            format!("Tool {} returned: {}", &name, tool_result));
+                            name,
+                            format!("Tool {} returned: {}", name, tool_result));
                         msgs.push(tool_res_msg);
                     }else{
-                        return Err(AgentError::ToolNotFound(call_info.name.clone()));
+                        return Err(AgentError::ToolNotFound(call_info.name));
                     }
                 }
             } else {
+                // update generation
+                result.generation = res.generation;
                 return Ok(result);
             }
         }
         Err(AgentError::MaxIterationsExceeded(self.max_iterations))
     }
-
-        
-    
 }

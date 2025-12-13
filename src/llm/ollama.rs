@@ -103,23 +103,83 @@ impl From<&Message> for ChatMessage {
 
 
 impl LLM for Ollama {
+    // fn generate<'a>(&'a self, messages: &'a [Message]) -> BoxFuture<'a, LLMResult<GenerateResult>> {
+    //     async move {
+    //         // build request (this clones/moves as generate_request does)
+    //         let request = self.generate_request(messages);
+
+    //         // perform async call and map errors into our LLMError
+    //         let response = self
+    //             .client
+    //             .send_chat_messages(request)
+    //             .await
+    //             .map_err(|e| LLMError::InvalidResponse(format!("{:?}", e)))?;
+    //         let generation = response.message.content.clone();
+
+    //         let tokens = if let Some(final_data) = response.final_data {
+    //             let prompt_tokens = final_data.prompt_eval_count as u32;
+    //             let completion_tokens = final_data.eval_count as u32;
+
+    //             TokenUsage {
+    //                 prompt_tokens,
+    //                 completion_tokens,
+    //                 total_tokens: prompt_tokens + completion_tokens,
+    //             }
+    //         } else {
+    //             TokenUsage::default()
+    //         };
+    //         // Robustly extract tool_calls: [{name, args}] from generation text
+    //         let mut tool_calls: Vec<crate::llm::CallInfo> = Vec::new();
+    //         let parsed_json_res = serde_json::from_str::<serde_json::Value>(&generation)
+    //             .or_else(|_err| {
+    //                 if let (Some(start), Some(end)) = (generation.find('{'), generation.rfind('}')) {
+    //                     let sub = &generation[start..=end];
+    //                     serde_json::from_str::<serde_json::Value>(sub)
+    //                 } else {
+    //                     Err(SerdeJsonError::custom("no json substring"))
+    //                 }
+    //             });
+    //         if let Ok(parsed) = parsed_json_res {
+    //             if let Some(arr) = parsed.get("tool_calls").and_then(|v| v.as_array()) {
+    //                 for entry in arr.iter() {
+    //                     if let Some(obj) = entry.as_object() {
+    //                         if let Some(name_val) = obj.get("name").and_then(|v| v.as_str()) {
+    //                             let name = name_val.to_string();
+    //                             let args = obj.get("args").cloned().unwrap_or_else(|| serde_json::json!({}));
+    //                             tool_calls.push(crate::llm::CallInfo { name, args });
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    //         Ok(GenerateResult { tokens, generation, tool_calls })
+    //     }
+    //     .boxed()
+    // }
     fn generate<'a>(&'a self, messages: &'a [Message]) -> BoxFuture<'a, LLMResult<GenerateResult>> {
         async move {
-            // build request (this clones/moves as generate_request does)
             let request = self.generate_request(messages);
-
-            // perform async call and map errors into our LLMError
             let response = self
                 .client
                 .send_chat_messages(request)
                 .await
                 .map_err(|e| LLMError::InvalidResponse(format!("{:?}", e)))?;
-            let generation = response.message.content.clone();
+            let mut generation = response.message.content.clone();
+
+            generation = generation.trim().to_string();
+            if generation.starts_with('{') && generation.ends_with(']') {
+                if let Some(last_brace) = generation.rfind('}') {
+                    if last_brace < generation.len() - 1 {
+                        // 只保留到最后一个}
+                        generation = generation[..=last_brace].to_string();
+                    }
+                }
+            }
 
             let tokens = if let Some(final_data) = response.final_data {
                 let prompt_tokens = final_data.prompt_eval_count as u32;
                 let completion_tokens = final_data.eval_count as u32;
-
                 TokenUsage {
                     prompt_tokens,
                     completion_tokens,
@@ -128,17 +188,19 @@ impl LLM for Ollama {
             } else {
                 TokenUsage::default()
             };
-            // Robustly extract tool_calls: [{name, args}] from generation text
-            let mut call_tools: Vec<crate::llm::CallInfo> = Vec::new();
-            let parsed_json_res = serde_json::from_str::<serde_json::Value>(&generation)
-                .or_else(|_err| {
-                    if let (Some(start), Some(end)) = (generation.find('{'), generation.rfind('}')) {
-                        let sub = &generation[start..=end];
-                        serde_json::from_str::<serde_json::Value>(sub)
-                    } else {
-                        Err(SerdeJsonError::custom("no json substring"))
-                    }
-                });
+
+            // --- 关键健壮处理 ---
+            let mut tool_calls: Vec<crate::llm::CallInfo> = Vec::new();
+            let parsed_json_res = match (generation.find('{'), generation.rfind('}')) {
+                (Some(start), Some(end)) if end > start => {
+                    let sub = &generation[start..=end];
+                    serde_json::from_str::<serde_json::Value>(sub)
+                }
+                _ => {
+                    serde_json::from_str::<serde_json::Value>(&generation)
+                }
+            };
+
             if let Ok(parsed) = parsed_json_res {
                 if let Some(arr) = parsed.get("tool_calls").and_then(|v| v.as_array()) {
                     for entry in arr.iter() {
@@ -146,14 +208,15 @@ impl LLM for Ollama {
                             if let Some(name_val) = obj.get("name").and_then(|v| v.as_str()) {
                                 let name = name_val.to_string();
                                 let args = obj.get("args").cloned().unwrap_or_else(|| serde_json::json!({}));
-                                call_tools.push(crate::llm::CallInfo { name, args });
+                                tool_calls.push(crate::llm::CallInfo { name, args });
                             }
                         }
                     }
                 }
+            } else {
+                println!("DEBUG Ollama: JSON parse error: {:?}", parsed_json_res);
             }
-
-            Ok(GenerateResult { tokens, generation, call_tools })
+            Ok(GenerateResult { tokens, generation, tool_calls })
         }
         .boxed()
     }
